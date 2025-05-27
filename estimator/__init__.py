@@ -30,7 +30,7 @@ from hashlib import blake2b
 
 import gi
 gi.require_version('Gtk', '3.0')
-from gi.repository import Gtk, Gdk, GLib, GObject, Gio, GdkPixbuf
+from gi.repository import Gtk, Gdk, GLib, GObject, Gio, GdkPixbuf, Poppler
 
 # local files import
 from . import undo, misc, data, view
@@ -1044,6 +1044,304 @@ class MainWindow:
         """Paste item from clipboard to measurement view"""
         self.measurements_view.paste_at_selection()
 
+    # Digital Takeoffs signal handler methods
+    def on_load_pdf_takeoffs_clicked(self, widget):
+        """Load a PDF file for digital takeoffs."""
+        dialog = Gtk.FileChooserDialog(
+            title="Please choose a PDF file",
+            parent=self.window,
+            action=Gtk.FileChooserAction.OPEN,
+        )
+        dialog.add_buttons(
+            Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, Gtk.STOCK_OPEN, Gtk.ResponseType.OK
+        )
+
+        file_filter_pdf = Gtk.FileFilter()
+        file_filter_pdf.set_name("PDF files")
+        file_filter_pdf.add_mime_type("application/pdf")
+        dialog.add_filter(file_filter_pdf)
+
+        response = dialog.run()
+        if response == Gtk.ResponseType.OK:
+            pdf_path = dialog.get_filename()
+            try:
+                pdf_uri = GLib.filename_to_uri(pdf_path, None)
+                poppler_doc = Poppler.Document.new_from_file(pdf_uri, None)
+                if poppler_doc and poppler_doc.get_n_pages() > 0:
+                    self.poppler_doc = poppler_doc
+                    self.poppler_page = self.poppler_doc.get_page(0) # Store first page
+                    
+                    page_width_pdf, page_height_pdf = self.poppler_page.get_size()
+                    
+                    scrolled_window = self.builder.get_object("scrolledwindow_pdf_takeoffs")
+                    alloc = scrolled_window.get_allocation()
+                    available_width = alloc.width if alloc.width > 1 else 600 
+                    available_height = alloc.height if alloc.height > 1 else 800
+                    
+                    available_width -= 2  # Account for border/padding
+                    available_height -= 2
+
+                    scale_w = available_width / page_width_pdf if page_width_pdf > 0 else 1.0
+                    scale_h = available_height / page_height_pdf if page_height_pdf > 0 else 1.0
+                    self.pdf_render_scale = min(scale_w, scale_h, 1.0) 
+
+                    render_width = int(page_width_pdf * self.pdf_render_scale)
+                    render_height = int(page_height_pdf * self.pdf_render_scale)
+                    
+                    # Connect size-allocate for the image if not already connected
+                    if not hasattr(self, 'image_size_allocate_handler_id') or not self.image_size_allocate_handler_id:
+                        self.image_size_allocate_handler_id = self.image_pdf_takeoffs.connect("size-allocate", self.on_pdf_image_size_allocate)
+
+                    pixbuf = self.poppler_page.render_to_pixbuf(0, 0, render_width, render_height, self.pdf_render_scale, 0)
+                    self.image_pdf_takeoffs.set_from_pixbuf(pixbuf)
+                    # Call explicitly after setting pixbuf, as size-allocate might not trigger if size is same
+                    self.on_pdf_image_size_allocate(self.image_pdf_takeoffs, self.image_pdf_takeoffs.get_allocation())
+
+
+                    self.takeoff_shapes = [] 
+                    self.drawing_area_takeoffs.queue_draw()
+                    self.display_status(misc.INFO, f"Loaded PDF: {os.path.basename(pdf_path)}")
+                else:
+                    self.poppler_doc = None
+                    self.poppler_page = None
+                    self.image_pdf_takeoffs.clear()
+                    self.display_status(misc.ERROR, "Could not load PDF or PDF has no pages.")
+            except GLib.Error as e:
+                self.poppler_doc = None
+                self.poppler_page = None
+                self.image_pdf_takeoffs.clear()
+                self.display_status(misc.ERROR, f"Error loading PDF: {e.message}")
+                log.error(f"Error loading PDF: {e}")
+        dialog.destroy()
+
+    def on_pdf_image_size_allocate(self, widget, allocation):
+        self.drawing_area_takeoffs.set_size_request(allocation.width, allocation.height)
+        if self.poppler_page:
+            page_width_pdf, page_height_pdf = self.poppler_page.get_size()
+            render_width = int(page_width_pdf * self.pdf_render_scale)
+            render_height = int(page_height_pdf * self.pdf_render_scale)
+            self.pdf_render_offset_x = max(0, (allocation.width - render_width) / 2)
+            self.pdf_render_offset_y = max(0, (allocation.height - render_height) / 2)
+        self.drawing_area_takeoffs.queue_draw()
+
+
+    def on_tool_draw_line_selected(self, widget):
+        self.current_draw_tool = "line"
+        self.display_status(misc.INFO, "Line tool selected. Click and drag on the PDF to draw.")
+
+    def on_tool_draw_rectangle_selected(self, widget):
+        self.current_draw_tool = "rectangle"
+        self.display_status(misc.INFO, "Rectangle tool selected. Click and drag on the PDF to draw.")
+
+    def _view_to_pdf_coords(self, view_x, view_y):
+        if not self.poppler_page or self.pdf_render_scale == 0:
+            return None
+        x_on_rendered_pdf = view_x - self.pdf_render_offset_x
+        y_on_rendered_pdf = view_y - self.pdf_render_offset_y
+        pdf_x = x_on_rendered_pdf / self.pdf_render_scale
+        pdf_y = y_on_rendered_pdf / self.pdf_render_scale
+        return pdf_x, pdf_y
+
+    def _pdf_to_view_coords(self, pdf_x, pdf_y):
+        if not self.poppler_page:
+            return None
+        x_on_rendered_pdf = pdf_x * self.pdf_render_scale
+        y_on_rendered_pdf = pdf_y * self.pdf_render_scale
+        view_x = x_on_rendered_pdf + self.pdf_render_offset_x
+        view_y = y_on_rendered_pdf + self.pdf_render_offset_y
+        return view_x, view_y
+
+    def on_takeoff_drawing_area_button_press(self, widget, event):
+        if self.current_draw_tool and event.button == Gdk.BUTTON_PRIMARY and self.poppler_page:
+            coords = self._view_to_pdf_coords(event.x, event.y)
+            if coords:
+                self.is_drawing = True
+                self.draw_start_point = coords
+                self.draw_current_point = coords 
+                widget.grab_focus()
+
+
+    def on_takeoff_drawing_area_motion_notify(self, widget, event):
+        if self.is_drawing and self.draw_start_point and self.poppler_page:
+            coords = self._view_to_pdf_coords(event.x, event.y)
+            if coords:
+                self.draw_current_point = coords
+                widget.queue_draw() 
+
+    def on_takeoff_drawing_area_button_release(self, widget, event):
+        if self.is_drawing and self.current_draw_tool and self.draw_start_point and self.draw_current_point and event.button == Gdk.BUTTON_PRIMARY and self.poppler_page:
+            start_pdf_x, start_pdf_y = self.draw_start_point
+            curr_pdf_x, curr_pdf_y = self.draw_current_point
+
+            shape_data = None
+            if abs(start_pdf_x - curr_pdf_x) > 0.1 or abs(start_pdf_y - curr_pdf_y) > 0.1: 
+                if self.current_draw_tool == "line":
+                    shape_data = {'type': "line", 'page_index': self.poppler_page.get_index(), 'coords': [(start_pdf_x, start_pdf_y), (curr_pdf_x, curr_pdf_y)]}
+                elif self.current_draw_tool == "rectangle":
+                    rect_x = min(start_pdf_x, curr_pdf_x)
+                    rect_y = min(start_pdf_y, curr_pdf_y)
+                    rect_w = abs(start_pdf_x - curr_pdf_x)
+                    rect_h = abs(start_pdf_y - curr_pdf_y)
+                    shape_data = {'type': "rectangle", 'page_index': self.poppler_page.get_index(), 'coords': [rect_x, rect_y, rect_w, rect_h]}
+            
+            if shape_data:
+                self.takeoff_shapes.append(shape_data)
+                log.info(f"Added shape: {shape_data}")
+            
+            self.is_drawing = False
+            widget.queue_draw() 
+
+    def on_takeoff_drawing_area_draw(self, widget, cr):
+        if not self.poppler_page:
+            return False 
+
+        cr.set_line_width(2) 
+        for shape in self.takeoff_shapes:
+            if shape['page_index'] == self.poppler_page.get_index():
+                cr.set_source_rgba(1.0, 0.0, 0.0, 0.8) 
+                if shape['type'] == "line":
+                    p1_pdf, p2_pdf = shape['coords']
+                    p1_view = self._pdf_to_view_coords(p1_pdf[0], p1_pdf[1])
+                    p2_view = self._pdf_to_view_coords(p2_pdf[0], p2_pdf[1])
+                    if p1_view and p2_view:
+                        cr.move_to(p1_view[0], p1_view[1])
+                        cr.line_to(p2_view[0], p2_view[1])
+                        cr.stroke()
+                elif shape['type'] == "rectangle":
+                    x_pdf, y_pdf, w_pdf, h_pdf = shape['coords']
+                    top_left_view = self._pdf_to_view_coords(x_pdf, y_pdf)
+                    w_view = w_pdf * self.pdf_render_scale
+                    h_view = h_pdf * self.pdf_render_scale
+                    if top_left_view:
+                        cr.rectangle(top_left_view[0], top_left_view[1], w_view, h_view)
+                        cr.stroke()
+        
+        if self.is_drawing and self.current_draw_tool and self.draw_start_point and self.draw_current_point:
+            cr.set_source_rgba(0.0, 0.0, 1.0, 0.5) 
+            p1_view = self._pdf_to_view_coords(self.draw_start_point[0], self.draw_start_point[1])
+            p2_view = self._pdf_to_view_coords(self.draw_current_point[0], self.draw_current_point[1])
+
+            if p1_view and p2_view:
+                if self.current_draw_tool == "line":
+                    cr.move_to(p1_view[0], p1_view[1])
+                    cr.line_to(p2_view[0], p2_view[1])
+                    cr.stroke()
+                elif self.current_draw_tool == "rectangle":
+                    rect_x_view = min(p1_view[0], p2_view[0])
+                    rect_y_view = min(p1_view[1], p2_view[1])
+                    rect_w_view = abs(p1_view[0] - p2_view[0])
+                    rect_h_view = abs(p1_view[1] - p2_view[1])
+                    cr.rectangle(rect_x_view, rect_y_view, rect_w_view, rect_h_view)
+                    cr.stroke()
+        return False
+
+    def on_takeoff_drawing_area_configure_event(self, widget, event):
+        if self.poppler_page: 
+            self.on_pdf_image_size_allocate(self.image_pdf_takeoffs, self.image_pdf_takeoffs.get_allocation())
+        widget.queue_draw()
+        return True
+
+    def on_takeoff_scroll_changed(self, adjustment):
+        self.drawing_area_takeoffs.queue_draw()
+
+    # Quoting signal handler methods
+    def on_create_quote_from_estimate_clicked(self, widget):
+        log.info("Populating Quote from Current Estimate")
+        self.entry_quote_title.set_text(self.gtk_header.get_subtitle() or "New Quote")
+        self.entry_quote_client_name.set_text("")
+        self.entry_quote_client_address.set_text("")
+        now = GLib.DateTime.new_now_local()
+        self.entry_quote_date.set_text(now.format("%Y-%m-%d"))
+
+        self.quote_items_store.clear()
+        if self.schedule_view and self.schedule_view.tree:
+            schedule_model = self.schedule_view.tree.get_model()
+            if schedule_model:
+                for row in schedule_model: # Iterate through Gtk.TreeModel
+                    try:
+                        item_no = row[self.schedule_view.COL_CODE]
+                        desc = row[self.schedule_view.COL_DESCRIPTION]
+                        qty = float(row[self.schedule_view.COL_QTY])
+                        unit = row[self.schedule_view.COL_UNIT]
+                        rate = float(row[self.schedule_view.COL_RATE])
+                        amount = float(row[self.schedule_view.COL_AMOUNT])
+                        self.quote_items_store.append([item_no, desc, qty, unit, rate, amount])
+                    except Exception as e:
+                        log.error(f"Error processing schedule row for quote: {row[:]} - {e}")
+            else:
+                log.warning("Schedule model not found for quoting.")
+        else:
+            log.warning("Schedule view or tree not found for quoting.")
+        
+        self.update_quote_preview(None) 
+
+    def _get_quote_preview_text(self):
+        title = self.entry_quote_title.get_text()
+        client_name = self.entry_quote_client_name.get_text()
+        client_address = self.entry_quote_client_address.get_text()
+        quote_date = self.entry_quote_date.get_text()
+
+        preview_text = f"QUOTE\n\n"
+        preview_text += f"Title: {title}\n"
+        preview_text += f"Date: {quote_date}\n\n"
+        preview_text += f"Client: {client_name}\n"
+        preview_text += f"Address: {client_address}\n\n"
+        preview_text += f"{'-'*80}\n"
+        preview_text += f"{'Item No.':<10} {'Description':<30} {'Qty':>7} {'Unit':<5} {'Rate':>10} {'Amount':>12}\n"
+        preview_text += f"{'-'*80}\n"
+
+        total_quote_amount = 0.0
+        for row in self.quote_items_store:
+            item_no, desc, qty, unit, rate, amount = row
+            preview_text += f"{item_no:<10} {desc:<30} {qty:>7.2f} {unit:<5} {rate:>10.2f} {amount:>12.2f}\n"
+            total_quote_amount += amount
+        
+        preview_text += f"{'-'*80}\n"
+        preview_text += f"{'TOTAL:':>65} {total_quote_amount:>12.2f}\n"
+        preview_text += f"{'-'*80}\n"
+        return preview_text
+
+    def update_quote_preview(self, widget=None, event=None): 
+        preview_text = self._get_quote_preview_text()
+        buf = self.textview_quote_preview.get_buffer()
+        buf.set_text(preview_text)
+
+    def on_generate_save_quote_clicked(self, widget):
+        log.info("Generate & Save Quote button clicked.")
+        quote_content = self._get_quote_preview_text()
+        
+        dialog = Gtk.FileChooserDialog(
+            title="Save Quote As...",
+            parent=self.window,
+            action=Gtk.FileChooserAction.SAVE
+        )
+        dialog.add_buttons(
+            Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
+            Gtk.STOCK_SAVE, Gtk.ResponseType.OK
+        )
+
+        default_filename = f"Quote - {self.entry_quote_title.get_text()}.txt"
+        dialog.set_current_name(default_filename)
+
+        filter_text = Gtk.FileFilter()
+        filter_text.set_name("Text files")
+        filter_text.add_mime_type("text/plain")
+        dialog.add_filter(filter_text)
+
+        response = dialog.run()
+        if response == Gtk.ResponseType.OK:
+            filepath = dialog.get_filename()
+            if not filepath.lower().endswith(".txt"):
+                filepath += ".txt"
+            try:
+                with open(filepath, "w", encoding="utf-8") as f:
+                    f.write(quote_content)
+                self.display_status(misc.INFO, f"Quote saved successfully to {filepath}")
+                log.info(f"Quote saved to {filepath}")
+            except Exception as e:
+                self.display_status(misc.ERROR, f"Error saving quote: {e}")
+                log.error(f"Error saving quote to {filepath}: {e}")
+        dialog.destroy()
 
     # Resource signal handler methods
 
@@ -1141,18 +1439,6 @@ class MainWindow:
     def on_refresh(self, widget):
         """Refresh display of views"""
         log.info('on_refresh called')
-        # template = {'match_criterion': [2, 'description', 'Add CP&OH @ 15%'],
-        #             'skip': 2,
-        #             'delete': 0,
-        #             'modify': [],
-        #             # 'modify': [['description', 'Add 18% GST (MF = 0.2127)'],
-        #             #         ['value', 0.18]],
-        #             'add': [{"itemtype": 2, "value": 0.01, "description": "Add LC @ 1%"},
-        #                     {"itemtype": 1, "description": "TOTAL"},
-        #                     {'description': 'Add 18% GST', 'value': 0.18, 'itemtype': 2},
-        #                     {'description': 'TOTAL', 'itemtype': 1},
-        #                     {"itemtype": 4, "value": 0, "description": "Say"}] }
-        # self.sch_database.bulk_modify_analysis(template)
         self.update()
         self.display_status(misc.INFO, "Project Refreshed")
 
@@ -1328,8 +1614,70 @@ class MainWindow:
         treeview_meas = self.builder.get_object("treeview_meas")
         self.measurements_view = view.measurement.MeasurementsView(self.window, self.sch_database, treeview_meas)
 
+        # Initialise Digital Takeoffs view elements
+        self.image_pdf_takeoffs = self.builder.get_object("image_pdf_takeoffs")
+        self.drawing_area_takeoffs = self.builder.get_object("drawing_area_takeoffs")
+        self.overlay_pdf_takeoffs = self.builder.get_object("overlay_pdf_takeoffs")
+        # Tool buttons are connected via builder.connect_signals
+
+        self.current_draw_tool = None
+        self.is_drawing = False
+        self.draw_start_point = None
+        self.draw_current_point = None
+        self.takeoff_shapes = [] 
+        self.poppler_doc = None
+        self.poppler_page = None
+        self.pdf_render_scale = 1.0 
+        self.pdf_render_offset_x = 0 
+        self.pdf_render_offset_y = 0
+        self.image_size_allocate_handler_id = None # To store the handler ID
+
+        # Connect scroll adjustments to redraw drawing area
+        scrolled_window_pdf = self.builder.get_object("scrolledwindow_pdf_takeoffs")
+        hadjustment = scrolled_window_pdf.get_hadjustment()
+        vadjustment = scrolled_window_pdf.get_vadjustment()
+        if hadjustment:
+            hadjustment.connect("value-changed", self.on_takeoff_scroll_changed)
+        if vadjustment:
+            vadjustment.connect("value-changed", self.on_takeoff_scroll_changed)
+
+        # Initialise Quoting view elements
+        self.entry_quote_title = self.builder.get_object("entry_quote_title")
+        self.entry_quote_client_name = self.builder.get_object("entry_quote_client_name")
+        self.entry_quote_client_address = self.builder.get_object("entry_quote_client_address")
+        self.entry_quote_date = self.builder.get_object("entry_quote_date")
+        self.treeview_quote_items = self.builder.get_object("treeview_quote_items")
+        self.textview_quote_preview = self.builder.get_object("textview_quote_preview")
+        self.button_generate_save_quote = self.builder.get_object("button_generate_save_quote")
+        self.button_generate_save_quote.connect("clicked", self.on_generate_save_quote_clicked)
+
+
+        # Setup GtkListStore for treeview_quote_items
+        # Columns: Item No.(str), Description(str), Quantity(float), Unit(str), Rate(float), Amount(float)
+        self.quote_items_store = Gtk.ListStore(str, str, float, str, float, float)
+        self.treeview_quote_items.set_model(self.quote_items_store)
+        column_titles = ["Item No.", "Description", "Quantity", "Unit", "Rate", "Amount"]
+        for i, title in enumerate(column_titles):
+            renderer = Gtk.CellRendererText()
+            if title in ["Quantity", "Rate", "Amount"]:
+                renderer.set_property("xalign", 1.0) # Right align numeric columns
+            column = Gtk.TreeViewColumn(title, renderer, text=i)
+            self.treeview_quote_items.append_column(column)
+
+        # Connect signals for live preview update
+        self.entry_quote_title.connect("changed", self.update_quote_preview)
+        self.entry_quote_client_name.connect("changed", self.update_quote_preview)
+        self.entry_quote_client_address.connect("changed", self.update_quote_preview)
+        self.entry_quote_date.connect("changed", self.update_quote_preview)
+        self.quote_items_store.connect("row-inserted", self.update_quote_preview)
+        self.quote_items_store.connect("row-deleted", self.update_quote_preview)
+        self.quote_items_store.connect("row-changed", self.update_quote_preview)
+
+
         # Main stack
         self.stack_main = self.builder.get_object("stack_main")
+        self.stack_sidebar = self.builder.get_object("stack_sidebar") 
+        self.main_paned = self.builder.get_object("main_paned") 
 
         # Darg-Drop support for files
         self.window.drag_dest_set( Gtk.DestDefaults.MOTION | Gtk.DestDefaults.HIGHLIGHT | Gtk.DestDefaults.DROP,
@@ -1498,3 +1846,5 @@ class MainApp(Gtk.Application):
 
     def on_quit(self, action, param):
         self.quit()
+
+[end of estimator/__init__.py]
