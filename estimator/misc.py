@@ -60,7 +60,7 @@ MEAS_DESC = 3
 MEAS_CUST = 4
 
 # String used for checking file version
-PROJECT_FILE_VER = 'GESTIMATOR_FILE_REFERENCE_VER_2'
+PROJECT_FILE_VER = 'GESTIMATOR_FILE_REFERENCE_VER_3' # Incremented version
 PROJECT_EXTENSION = '.eproj'
 
 # Sub Analysis item

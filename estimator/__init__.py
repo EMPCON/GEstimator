@@ -612,6 +612,14 @@ class MainWindow:
         self.schedule_view.update_store()
         self.display_status(misc.INFO, "Schedule items re-numbered")
 
+    def on_sch_manage_dependencies_clicked(self, button):
+        """Handle Manage Dependencies button click."""
+        if self.schedule_view:
+            self.schedule_view.manage_selected_task_dependencies()
+        else:
+            log.warning("MainWindow - on_sch_manage_dependencies_clicked - ScheduleView not initialized.")
+            self.display_status(misc.ERROR, "Schedule view not available.")
+
     def on_sch_res_usage_clicked(self, button):
         view.resource.ResourceUsageDialog(self.window, self.sch_database).run()
 
@@ -1134,6 +1142,33 @@ class MainWindow:
     def on_res_sync_rates_clicked(self, button):
         """Synchronise rates from schedule for subanalysis items"""
         self.resource_view.update_resource_from_schedule()
+
+    def on_quick_add_resource_clicked(self, widget):
+        """Launch the Quick Add Resource dialog."""
+        from .view.dialogs.quick_add_resource_dialog import QuickAddResourceDialog # Delayed import
+
+        dialog = QuickAddResourceDialog(self.window, self.sch_database)
+        response = dialog.run()
+
+        if response == Gtk.ResponseType.OK:
+            if dialog.validate_inputs(): # Validation including duplicate check
+                resource_model = dialog.get_resource_data()
+                if resource_model:
+                    # insert_resource is undoable and handles category creation if needed
+                    # It expects path=None to add to default category or based on resource_model.category
+                    ret_val = self.sch_database.insert_resource(resource_model, path=None) 
+                    if ret_val and ret_val[0]: # ret_val is [path_added, res_category_added] or False
+                        self.resource_view.update_store() # Refresh the main resource view
+                        self.display_status(misc.INFO, f"Resource '{resource_model.code}' added successfully.")
+                        # If AnalysisView is active and needs this new resource, it won't auto-update.
+                        # This might be a point for future enhancement (e.g., a signal).
+                    else:
+                        self.display_status(misc.ERROR, f"Failed to add resource '{resource_model.code}'.")
+                else: # Should be caught by validate_inputs typically
+                     self.display_status(misc.ERROR, "Invalid resource data.")
+            # If validate_inputs is False, it already showed an error dialog.
+        
+        dialog.destroy()
 
 
     # General signal handler methods

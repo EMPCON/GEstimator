@@ -293,7 +293,8 @@ class ScheduleItemModel:
     def __init__(self, code, description, unit = None, rate = None,
                  qty = None, category = None,
                  parent = None, remarks = None, ana_remarks = None,
-                 colour = None):
+                 colour = None, duration = None, start_date = None,
+                 end_date = None, is_milestone = False, predecessors_display_text = None):
         # Database fields
         self.code = code
         self.description = description
@@ -305,6 +306,12 @@ class ScheduleItemModel:
         self.category = category
         self.parent = parent
         self.colour = colour
+        # New scheduling fields
+        self.duration = duration
+        self.start_date = start_date
+        self.end_date = end_date
+        self.is_milestone = is_milestone
+        self.predecessors_display_text = predecessors_display_text # For UI display
         # Additional fields
         self.ana_items = []
         self.resources = dict()

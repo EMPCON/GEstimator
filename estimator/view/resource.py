@@ -97,8 +97,11 @@ class ResourceView:
         self.tree.get_selection().set_mode(Gtk.SelectionMode.MULTIPLE)
         self.tree.set_rubber_banding(True)
         self.tree.connect("key-press-event", self.on_key_press_treeview, self.tree)
-        self.tree.connect("button-press-event", self.on_click_event)
+        # self.tree.connect("button-press-event", self.on_click_event) # Will be replaced by on_treeview_button_press
+        self.tree.connect("button-press-event", self.on_treeview_button_press)
         self.search_field.connect("search-changed", self.on_search)
+
+        self._create_context_menu()
         
         self.columns = dict()
         self.cells = dict()
@@ -149,6 +152,81 @@ class ResourceView:
         self.clipboard = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
         
         self.update_store()
+
+    def _create_context_menu(self):
+        self.context_menu = Gtk.Menu()
+
+        self.edit_item_menu = Gtk.MenuItem(label="Edit Resource...")
+        self.edit_item_menu.connect("activate", self.on_context_edit_resource)
+        self.context_menu.append(self.edit_item_menu)
+
+        self.delete_item_menu = Gtk.MenuItem(label="Delete Resource")
+        self.delete_item_menu.connect("activate", self.on_context_delete_resource)
+        self.context_menu.append(self.delete_item_menu)
+        
+        self.context_menu.show_all()
+
+    def on_treeview_button_press(self, treeview, event):
+        if event.button == Gdk.BUTTON_SECONDARY: # Right-click
+            selection = self.tree.get_selection()
+            path, _ = treeview.get_path_at_pos(int(event.x), int(event.y))
+            
+            is_item_selected = False
+            if path:
+                # Check if it's an item row (not a category row)
+                # Category rows have path depth 1, item rows have depth 2 in this model
+                if len(path.get_indices()) == 2:
+                    is_item_selected = True
+                    # Ensure the right-clicked row is selected if multiple selection is off or for clarity
+                    if not selection.path_is_selected(path):
+                        selection.unselect_all()
+                        selection.select_path(path)
+                else: # It's a category row or no valid item
+                    selection.unselect_all() # Don't show context menu for category rows
+
+            else: # Click outside any row
+                selection.unselect_all()
+
+            # Update sensitivity based on whether a valid item is now selected
+            is_item_selected_after_click = selection.count_selected_rows() > 0 and \
+                                           (len(selection.get_selected_rows()[1][0].get_indices()) == 2)
+
+            self.edit_item_menu.set_sensitive(is_item_selected_after_click)
+            self.delete_item_menu.set_sensitive(is_item_selected_after_click)
+            
+            if is_item_selected_after_click : # Only show if a resource item is truly selected
+                 self.context_menu.popup_at_pointer(event)
+            return True # Indicate event handled for right-click
+        
+        # Handle left-click for existing double-click to edit behavior (select_action)
+        elif event.type == Gdk.EventType._2BUTTON_PRESS and event.button == Gdk.BUTTON_PRIMARY:
+            self.select_action() # This usually triggers edit on first cell or similar
+            return True
+            
+        return False # Propagate other button press events
+
+
+    def on_context_edit_resource(self, widget):
+        log.info("ResourceView - Context Menu: Edit Resource activated.")
+        # For now, simply activate the first cell of the selected row for editing
+        # A more robust solution would open ResourceEntryDialog for the selected item.
+        selection = self.tree.get_selection()
+        model, paths = selection.get_selected_rows()
+        if paths:
+            path = paths[0] # Assuming single selection for context menu edit
+            # Activate editing on the first editable column (e.g., 'Code' or 'Description')
+            # Code is column 0, Description is column 1
+            # We need to find the actual Gtk.TreeViewColumn object.
+            # The first column in display is usually Code (index 0)
+            first_column_to_edit = self.tree.get_column(0) # Get 'Code' column
+            if first_column_to_edit:
+                 self.tree.set_cursor(path, first_column_to_edit, True) # True to start editing
+
+
+    def on_context_delete_resource(self, widget):
+        log.info("ResourceView - Context Menu: Delete Resource activated.")
+        self.delete_selected_item() # This method already handles confirmation and deletion
+
 
     def update_store(self):
     
