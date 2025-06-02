@@ -6,12 +6,14 @@ class CustomItem:
         self.name = "Rectangle Area"
         self.itemtype = "rectangle_area" # Filename for identification
         self.description = "Calculates area of a rectangle: Length (L) x Width (W)."
-        
+        self.display_description = "Area = Length × Width" # For UI display
+        self.icon_name = "object-select-symbolic" # Example GTK stock icon
+
         # Parameters for each record (row) in the measurement grid
-        self.captions = ['No.', 'Length (L)', 'Width (W)', 'Area'] 
+        self.captions = ['No.', 'Length (L)', 'Width (W)', 'Area']
         self.columntypes = [misc.MEAS_NO, misc.MEAS_L, misc.MEAS_L, misc.MEAS_CUST]
-        
-        # Functions for each column. 
+
+        # Functions for each column.
         # For input columns, it's just returning the data at that index.
         # For MEAS_CUST, it's calculating the value.
         # `data` is the list of evaluated numeric values for the current record.
@@ -22,25 +24,25 @@ class CustomItem:
             lambda data, row: data[2], # Width
             lambda data, row: data[1] * data[2] if len(data) > 2 else 0 # Area = L * W
         ]
-        
+
         # Function to calculate the primary result for a single record/row
         # `data` is [No., Length, Width] after evaluation
         self.total_func_item = lambda data: data[1] * data[2] if len(data) > 2 else 0 # Area = L * W
-        
+
         # Function to calculate the overall total for all records
         # `records` is a list of RecordCustom instances
         # `user_data` is for parameters affecting the whole item (not used here)
         self.total_func = lambda records, user_data: sum(item.total for item in records)
-        
+
         # Defines how many schedule items can be linked (usually 1 for simple quantity)
         self.itemnos_mask = ['Schedule Item No.']
         self.itemnos_mapping = [None] # No direct mapping of schedule item props to columns
-        
+
         # User data (parameters that apply to the whole measurement item, not per record)
         self.captions_udata = [] # No user data for this simple template
         self.columntypes_udata = []
         self.user_data_default = []
-        
+
         # Spreadsheet export dimensions (optional, for formatting)
         self.dimensions = [[10, 20, 20, 20], [False, False, False, False]]
 

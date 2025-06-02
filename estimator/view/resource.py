@@ -163,14 +163,14 @@ class ResourceView:
         self.delete_item_menu = Gtk.MenuItem(label="Delete Resource")
         self.delete_item_menu.connect("activate", self.on_context_delete_resource)
         self.context_menu.append(self.delete_item_menu)
-        
+
         self.context_menu.show_all()
 
     def on_treeview_button_press(self, treeview, event):
         if event.button == Gdk.BUTTON_SECONDARY: # Right-click
             selection = self.tree.get_selection()
             path, _ = treeview.get_path_at_pos(int(event.x), int(event.y))
-            
+
             is_item_selected = False
             if path:
                 # Check if it's an item row (not a category row)
@@ -193,16 +193,16 @@ class ResourceView:
 
             self.edit_item_menu.set_sensitive(is_item_selected_after_click)
             self.delete_item_menu.set_sensitive(is_item_selected_after_click)
-            
+
             if is_item_selected_after_click : # Only show if a resource item is truly selected
                  self.context_menu.popup_at_pointer(event)
             return True # Indicate event handled for right-click
-        
+
         # Handle left-click for existing double-click to edit behavior (select_action)
         elif event.type == Gdk.EventType._2BUTTON_PRESS and event.button == Gdk.BUTTON_PRIMARY:
             self.select_action() # This usually triggers edit on first cell or similar
             return True
-            
+
         return False # Propagate other button press events
 
 

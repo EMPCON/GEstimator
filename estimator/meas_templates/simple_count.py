@@ -6,12 +6,12 @@ class CustomItem:
         self.name = "Simple Count"
         self.itemtype = "simple_count"
         self.description = "Counts number of items. Quantity is the count."
-        
+
         # For this template, the "Description of Item" will be stored in MeasurementItem.remark
         # And "Number of Items" will be the primary result of each record.
-        self.captions = ['Item Description', 'Count', 'Unit'] 
-        self.columntypes = [misc.MEAS_DESC, misc.MEAS_NO, misc.MEAS_DESC] 
-        
+        self.captions = ['Item Description', 'Count', 'Unit']
+        self.columntypes = [misc.MEAS_DESC, misc.MEAS_NO, misc.MEAS_DESC]
+
         # cust_funcs: For 'Item Description', 'Count', 'Unit'
         # 'Item Description' and 'Unit' are direct inputs for each record here.
         # 'Count' is also a direct input, but will be summed up.
@@ -20,25 +20,25 @@ class CustomItem:
             lambda data, row: data[1], # Count (number)
             lambda data, row: data[2]  # Unit (string)
         ]
-        
+
         # total_func_item: Calculates the value for a single record (row) that contributes to the main quantity.
         # Here, it's simply the 'Count' value from the record.
         # `data` is [ItemDescription_str, Count_eval, Unit_str] after evaluation
         self.total_func_item = lambda data: data[1] if len(data) > 1 else 0 # The 'Count'
-        
+
         # total_func: Calculates the overall total quantity for all records.
         # It sums the 'total' (which is the 'Count') from each RecordCustom instance.
         self.total_func = lambda records, user_data: sum(item.total for item in records)
-        
+
         # itemnos_mask: Defines how many schedule items can be linked.
         self.itemnos_mask = ['Schedule Item No.']
-        self.itemnos_mapping = [None] 
-        
+        self.itemnos_mapping = [None]
+
         # User data (parameters that apply to the whole measurement item, not per record)
-        self.captions_udata = [] 
+        self.captions_udata = []
         self.columntypes_udata = []
         self.user_data_default = []
-        
+
         self.dimensions = [[30, 10, 10], [True, False, False]] # Description, Count, Unit
 
     def get_text_value(self, records, user_data, itemnos):

@@ -1156,7 +1156,7 @@ class MainWindow:
                 if resource_model:
                     # insert_resource is undoable and handles category creation if needed
                     # It expects path=None to add to default category or based on resource_model.category
-                    ret_val = self.sch_database.insert_resource(resource_model, path=None) 
+                    ret_val = self.sch_database.insert_resource(resource_model, path=None)
                     if ret_val and ret_val[0]: # ret_val is [path_added, res_category_added] or False
                         self.resource_view.update_store() # Refresh the main resource view
                         self.display_status(misc.INFO, f"Resource '{resource_model.code}' added successfully.")
@@ -1167,7 +1167,7 @@ class MainWindow:
                 else: # Should be caught by validate_inputs typically
                      self.display_status(misc.ERROR, "Invalid resource data.")
             # If validate_inputs is False, it already showed an error dialog.
-        
+
         dialog.destroy()
 
 

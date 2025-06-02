@@ -48,7 +48,7 @@ class QuickAddResourceDialog(Gtk.Dialog):
         self.spin_rate.set_numeric(True)
         grid.attach(lbl_rate, 0, 3, 1, 1)
         grid.attach(self.spin_rate, 1, 3, 1, 1)
-        
+
         # Category
         lbl_category = Gtk.Label(label="Category:", xalign=0)
         self.combo_category = Gtk.ComboBoxText()
@@ -115,7 +115,7 @@ class QuickAddResourceDialog(Gtk.Dialog):
             md.run()
             md.destroy()
             return False
-        
+
         # Check if resource code already exists
         if self.database.get_resource(data.code) is not None:
             md = Gtk.MessageDialog(
@@ -131,5 +131,5 @@ class QuickAddResourceDialog(Gtk.Dialog):
             md.run()
             md.destroy()
             return False
-            
+
         return True

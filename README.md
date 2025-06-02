@@ -1,63 +1,71 @@
 # GEstimator
 
-[Website](https://manuvarkey.github.io/GEstimator) • 
-[Forum](https://github.com/manuvarkey/GEstimator/discussions/) •
-[Bug tracker](https://github.com/manuvarkey/GEstimator/issues) •
-[Git repository](https://github.com/manuvarkey/GEstimator)
+GEstimator is a Python-based application for project estimation, scheduling, and takeoffs.
 
-[![Release](https://img.shields.io/github/release/manuvarkey/GEstimator.svg)](https://github.com/manuvarkey/GEstimator/releases/latest)
-![License](https://img.shields.io/github/license/manuvarkey/GEstimator)
+## Prerequisites
 
+*   **Python 3:** (Python 3.8 or newer recommended)
+*   **Git:** For cloning the repository.
+*   **GTK+ 3 and PyGObject:** For the graphical user interface.
 
-<a href="https://github.com/manuvarkey/GEstimator/releases/latest"><img height="51" alt="Download for Windows" src="https://raw.githubusercontent.com/manuvarkey/GElectrical/master/source/artwork/windows_badge.svg"/> </a>
-<a href="https://beta.flathub.org/apps/com.kavilgroup.gestimator"><img height="51" alt="Download on Flathub" src="https://flathub.org/assets/badges/flathub-badge-en.svg"/> </a>
-<a href="https://snapcraft.io/gestimator"><img height="51" alt="Download on Snap Store" src="https://snapcraft.io/static/images/badges/en/snap-store-black.svg"/> </a> 
+## Setup Instructions (Linux Example)
 
-GEstimator is a civil estimation software for preparing cost and quantity estimates of civil/electrical works along with detailed rate analysis. It supports multiple user databases and comes bundled with **DSR 2021 (Civil)** and **DSR 2022 (E&M)**.
+These instructions are primarily for Debian/Ubuntu and Fedora-based Linux distributions. Setting up GTK-based Python applications on Windows or macOS can be more complex and typically involves using environments like MSYS2 (for Windows) or Homebrew (for macOS) to install GTK.
 
-The program is organised in three tabs - Schedule Items, Details of Measurements and Resource Items. Schedule Items implements an interface to input the estimate schedule/import the schedule from a .xlsx file. On editing (`Edit`) any schedule item an Analysis View is displayed allowing edit of the rate analysis. Details of Measurements allows the details of measurements to be recorded against items added under Schedule Items. Resource Items allows input/manipulation of the resources like material, labour and tools/plants upon which the rate analysis will be framed.
+**1. Clone the Repository:**
 
-The estimates can be rendered into a .xlsx document from `Menu->Export...`. The exported sheet includes - the schedule of rates for the work, schedule of resources, details of measurements, resource usage for the work and analysis of rates for various items of work.
+   Open your terminal and navigate to the directory where you want to store the project. Then run:
+   ```bash
+   git clone https://github.com/EMPCON/GEstimator.git
+   cd GEstimator
+   ```
+   If the latest features are on a specific branch (e.g., `feature-enhancements-phase1`), check it out:
+   ```bash
+   # git checkout feature-enhancements-phase1
+   ```
 
+**2. Install GTK+ and PyGObject System Dependencies:**
 
-## Tutorials
+   *   **Debian/Ubuntu:**
+      ```bash
+      sudo apt update
+      sudo apt install python3-gi python3-gi-cairo gir1.2-gtk-3.0 libgtk-3-dev
+      ```
+   *   **Fedora:**
+      ```bash
+      sudo dnf install python3-gobject gtk3-devel
+      ```
+   *(Note: Exact package names might vary slightly based on your distribution version.)*
 
-[![Simple Usage](https://raw.githubusercontent.com/manuvarkey/GEstimator/master/screenshots/screenshot1.png)](https://youtu.be/B3ycfivex-E)
+**3. Create and Activate a Python Virtual Environment (Recommended):**
 
-[![Advanced Usage](https://raw.githubusercontent.com/manuvarkey/GEstimator/master/screenshots/screenshot2.png)](https://youtu.be/lo3-QIPtyI8)
+   In the project's root directory (`GEstimator`):
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate
+   ```
+   *(Your shell prompt should change to indicate the active virtual environment.)*
 
-## Screenshots
+**4. Install Python Dependencies:**
 
-![Image 1](https://raw.githubusercontent.com/manuvarkey/GEstimator/master/screenshots/schedule.png)
-![Image 2](https://raw.githubusercontent.com/manuvarkey/GEstimator/master/screenshots/resource.png)
-![Image 3](https://raw.githubusercontent.com/manuvarkey/GEstimator/master/screenshots/analysis.png)
-![Image 4](https://raw.githubusercontent.com/manuvarkey/GEstimator/master/screenshots/addlibrary.png)
-![Image 5](https://raw.githubusercontent.com/manuvarkey/GEstimator/master/screenshots/measurements.png)
+   With the virtual environment active, install the required Python packages:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-## Resources
-Additional libraries and other resources can be downloaded from [GEstimator Other Databases](https://github.com/manuvarkey/GEstimator/tree/master/Other%20databases).
+## Running GEstimator
 
-## Installation
+Once the setup is complete:
 
-Latest source code and binaries for GEstimator can be downloaded from this page under `Releases`.
+1.  Ensure you are in the project's root directory (`GEstimator`).
+2.  Ensure your virtual environment is activated (`source venv/bin/activate`).
+3.  Run the application:
+    ```bash
+    python gestimator.py
+    ```
 
-### Source installation
+This will launch the GEstimator application window.
 
-Application can be installed using `python setup.py install`. It has been tested with Python 3.4 and Gtk 3.18, and has the following extra dependencies.
+---
 
-## Dependencies:
-
-### Python 3 (v3.5)
-
-Python Modules:
-
-* undo - Included along with distribution.
-* openpyxl (v2.5.1) - Not included
-* appdirs (v1.4.3) - Not included
-* jdcal - Not included
-* et_xmlfile - Not included
-* peewee (v3.2.0) - Not included
-* pycairo - Not included
-* PyGObject - Not included
-
-### GTK3  (v3.36)
+This README provides basic setup instructions. For detailed feature information, please refer to the application's interface and any accompanying documentation.
